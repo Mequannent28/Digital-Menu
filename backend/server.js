@@ -1,5 +1,6 @@
 const express = require('express')
 const cors = require('cors')
+const path = require('path')
 require('dotenv').config()
 
 const app = express()
@@ -18,6 +19,14 @@ app.use('/api/users',      require('./routes/users'))
 
 app.get('/', (req, res) => res.json({ message: 'ABC Restaurant API', status: 'running' }))
 app.get('/health', (req, res) => res.json({ status: 'healthy' }))
+
+// Serve frontend in production (Render)
+if (process.env.NODE_ENV === 'production' || process.env.RENDER) {
+  app.use(express.static(path.join(__dirname, '../frontend/dist')))
+  app.get('*', (req, res) => {
+    res.sendFile(path.resolve(__dirname, '../frontend/dist', 'index.html'))
+  })
+}
 
 const PORT = process.env.PORT || 8000
 app.listen(PORT, '0.0.0.0', () => {
