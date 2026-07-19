@@ -1,0 +1,50 @@
+import client from './client'
+
+export const menuApi = {
+  getRestaurantInfo: () => client.get('/restaurant'),
+  getCategories: () => client.get('/categories'),
+  getMenuItems: (params) => client.get('/menu-items', { params }),
+  getMenuItem: (id) => client.get(`/menu-items/${id}`),
+  getModifierGroups: (itemId) => client.get(`/menu-items/${itemId}/modifiers`),
+  getFeatured: () => client.get('/menu-items/featured'),
+  search: (q) => client.get('/menu-items/search', { params: { q } }),
+}
+
+export const orderApi = {
+  createOrder: (data) => client.post('/orders', data),
+  getOrder: (id) => client.get(`/orders/${id}`),
+  callWaiter: (tableId) => client.post('/waiter/call', { table_id: tableId }),
+  requestBill: (tableId) => client.post('/waiter/request-bill', { table_id: tableId }),
+}
+
+export const adminApi = {
+  login: (data) => client.post('/auth/login', data),
+  me: () => client.get('/auth/me'),
+  updateRestaurant: (data) => client.put('/restaurant', data),
+  getCategories: () => client.get('/admin/categories'),
+  createCategory: (data) => client.post('/admin/categories', data),
+  updateCategory: (id, data) => client.put(`/admin/categories/${id}`, data),
+  deleteCategory: (id) => client.delete(`/admin/categories/${id}`),
+  getMenuItems: (params) => client.get('/admin/menu-items', { params }),
+  createMenuItem: (data) => client.post('/admin/menu-items', data),
+  updateMenuItem: (id, data) => client.put(`/admin/menu-items/${id}`, data),
+  deleteMenuItem: (id) => client.delete(`/admin/menu-items/${id}`),
+  getModifierGroups: () => client.get('/admin/modifier-groups'),
+  createModifierGroup: (data) => client.post('/admin/modifier-groups', data),
+  updateModifierGroup: (id, data) => client.put(`/admin/modifier-groups/${id}`, data),
+  deleteModifierGroup: (id) => client.delete(`/admin/modifier-groups/${id}`),
+  createModifier: (groupId, data) => client.post(`/admin/modifier-groups/${groupId}/modifiers`, data),
+  updateModifier: (id, data) => client.put(`/admin/modifiers/${id}`, data),
+  deleteModifier: (id) => client.delete(`/admin/modifiers/${id}`),
+  getTables: () => client.get('/admin/tables'),
+  createTable: (data) => client.post('/admin/tables', data),
+  updateTable: (id, data) => client.put(`/admin/tables/${id}`, data),
+  deleteTable: (id) => client.delete(`/admin/tables/${id}`),
+  getOrders: (params) => client.get('/admin/orders', { params }),
+  updateOrderStatus: (id, status) => client.put(`/admin/orders/${id}/status`, { status }),
+  getUsers: () => client.get('/admin/users'),
+  createUser: (data) => client.post('/admin/users', data),
+  updateUser: (id, data) => client.put(`/admin/users/${id}`, data),
+  deleteUser: (id) => client.delete(`/admin/users/${id}`),
+  getReports: (params) => client.get('/admin/reports', { params }),
+}

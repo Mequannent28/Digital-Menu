@@ -1,0 +1,172 @@
+@import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-primary: #e85d04;
+  --color-primary-light: #f48c06;
+  --color-primary-dark: #d00000;
+  --color-accent: #ffba08;
+  --color-surface: #ffffff;
+  --color-surface-dark: #1a1a2e;
+  --font-sans: 'Inter', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #e85d04;
+  border-radius: 99px;
+}
+
+/* Hide scrollbar for category nav */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Glassmorphism */
+.glass {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.glass-dark {
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Cart fly animation */
+@keyframes flyToCart {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.5) translateY(-50px); opacity: 0.8; }
+  100% { transform: scale(0) translateY(-100px) translateX(200px); opacity: 0; }
+}
+
+.fly-to-cart {
+  animation: flyToCart 0.6s ease-in-out forwards;
+}
+
+/* Pulse dot */
+@keyframes pulseDot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.5); opacity: 0.6; }
+}
+.pulse-dot {
+  animation: pulseDot 1.5s ease-in-out infinite;
+}
+
+/* Shimmer loading */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+.dark .shimmer {
+  background: linear-gradient(90deg, #2a2a3e 25%, #3a3a4e 50%, #2a2a3e 75%);
+  background-size: 200% 100%;
+}
+
+/* Input field base style */
+.input-field {
+  @apply w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-400 transition;
+}
+
+/* ─────────────────────────────────────────────
+   ADMIN UI UTILITIES
+───────────────────────────────────────────── */
+.card {
+  @apply bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow;
+}
+
+.btn-primary {
+  @apply flex items-center gap-2 bg-orange-500 text-white px-4 py-2.5 rounded-xl font-semibold hover:bg-orange-600 transition-colors shadow-md shadow-orange-200 dark:shadow-none;
+}
+
+.btn-secondary {
+  @apply flex-1 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors;
+}
+
+.icon-btn {
+  @apply w-8 h-8 rounded-lg flex items-center justify-center text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors;
+}
+
+.label {
+  @apply block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2;
+}
+
+.toggle-btn {
+  @apply relative w-11 h-6 rounded-full transition-colors;
+}
+
+.toggle-dot {
+  @apply absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform;
+}
+
+.modal-backdrop {
+  @apply fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto;
+}
+
+.modal {
+  @apply bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md border border-gray-100 dark:border-gray-800;
+}
+
+.modal-header {
+  @apply flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-800;
+}
+
+.modal-footer {
+  @apply flex gap-3 p-5 pt-0;
+}
+
+/* Badges */
+.badge {
+  @apply text-[10px] px-1.5 py-0.5 rounded-full flex items-center gap-0.5 font-medium;
+}
+.badge-red {
+  @apply bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400;
+}
+.badge-green {
+  @apply bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400;
+}
+.badge-purple {
+  @apply bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400;
+}
+.badge-amber {
+  @apply bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400;
+}
+
+/* Safe area for iPhone home indicator */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
