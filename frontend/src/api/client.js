@@ -1,7 +1,8 @@
 import axios from 'axios'
 
-// Use relative path so Vite proxy handles routing — works on localhost AND mobile (via IP:3000)
-const API_URL = '/api'
+// Use environment variable for remote backend, fallback to relative path
+const API_URL = import.meta.env.VITE_API_URL || '/api'
+
 
 const client = axios.create({
   baseURL: API_URL,
