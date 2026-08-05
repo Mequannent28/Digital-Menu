@@ -1,27 +1,46 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FiSearch, FiEye, FiX, FiRefreshCw, FiTrash2 } from 'react-icons/fi'
+import { FiSearch, FiEye, FiX, FiRefreshCw, FiTrash2, FiPrinter } from 'react-icons/fi'
 import { useOrderStore } from '../../store/useOrderStore'
 import toast from 'react-hot-toast'
 
 const API = '/api'
 
 const statusConfig = {
-  new:       { label: 'New',       bg: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',       dot: 'bg-blue-500' },
+  new: { label: 'New', bg: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400', dot: 'bg-blue-500' },
   preparing: { label: 'Preparing', bg: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400', dot: 'bg-yellow-500' },
-  ready:     { label: 'Ready',     bg: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',    dot: 'bg-green-500' },
-  served:    { label: 'Served',    bg: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',           dot: 'bg-gray-400' },
-  cancelled: { label: 'Cancelled', bg: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',           dot: 'bg-red-500' },
+  ready: { label: 'Ready', bg: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400', dot: 'bg-green-500' },
+  served: { label: 'Served', bg: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400', dot: 'bg-gray-400' },
+  cancelled: { label: 'Cancelled', bg: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400', dot: 'bg-red-500' },
+}
+
+function getAvailableStatuses(currentStatus) {
+  if (currentStatus === 'served') return ['served']
+  if (currentStatus === 'cancelled') return ['cancelled']
+  if (currentStatus === 'ready') return ['ready', 'served', 'cancelled']
+  if (currentStatus === 'preparing') return ['preparing', 'ready', 'cancelled']
+  if (currentStatus === 'new') return ['new', 'preparing', 'cancelled']
+  return Object.keys(statusConfig)
 }
 
 function timeAgo(iso) {
   if (!iso) return ''
-  const diff = Math.floor((Date.now() - new Date(iso)) / 1000)
+  let d = new Date(iso)
+  let diff = Math.floor((Date.now() - d) / 1000)
+  if (diff < -60) {
+    d = new Date(d.getTime() + (d.getTimezoneOffset() * 60000))
+    diff = Math.floor((Date.now() - d) / 1000)
+  }
+  if (diff < 0) diff = 0
   if (diff < 60) return `${diff}s ago`
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-  return new Date(iso).toLocaleDateString()
+  return d.toLocaleDateString()
 }
+
+const getApiBase = () =>
+  `${window.location.protocol}//${window.location.hostname}:8000/api`
+const getToken = () => localStorage.getItem('token')
 
 export default function Orders() {
   const { markAllRead } = useOrderStore()
@@ -30,15 +49,14 @@ export default function Orders() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [selectedOrder, setSelectedOrder] = useState(null)
-  const token = localStorage.getItem('token')
   const intervalRef = useRef(null)
   const prevCountRef = useRef(0)
 
   // ── Fetch all orders from API ─────────────────
   const fetchOrders = useCallback(async (silent = false) => {
     try {
-      const res = await fetch(`${API}/orders`, {
-        headers: { Authorization: `Bearer ${token}` }
+      const res = await fetch(`${getApiBase()}/orders`, {
+        headers: { Authorization: `Bearer ${getToken()}` }
       })
       if (!res.ok) throw new Error('Failed')
       const data = await res.json()
@@ -52,6 +70,12 @@ export default function Orders() {
         phone: o.phone,
         notes: o.notes,
         status: o.status,
+        orderType:       o.order_type || 'dine_in',
+        pickupNumber:    o.pickup_number || '',
+        pickupTime:      o.pickup_time || '',
+        deliveryAddress: o.delivery_address || '',
+        deliveryLat:     o.delivery_lat || null,
+        deliveryLng:     o.delivery_lng || null,
         subtotal: o.subtotal,
         vat: o.vat,
         serviceCharge: o.service_charge,
@@ -83,7 +107,7 @@ export default function Orders() {
           gain.gain.setValueAtTime(0.4, ctx.currentTime)
           gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6)
           osc.start(); osc.stop(ctx.currentTime + 0.6)
-        } catch (_) {}
+        } catch (_) { }
       }
       prevCountRef.current = mapped.length
       setOrders(mapped)
@@ -93,7 +117,7 @@ export default function Orders() {
     } finally {
       setLoading(false)
     }
-  }, [token, markAllRead])
+  }, [markAllRead])
 
   // Fetch on mount + every 5 seconds
   useEffect(() => {
@@ -118,11 +142,11 @@ export default function Orders() {
     if (selectedOrder?.id === order.id) setSelectedOrder(s => ({ ...s, status: newStatus }))
 
     try {
-      await fetch(`${API}/orders/${order.dbId}/status`, {
+      await fetch(`${getApiBase()}/orders/${order.dbId}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${getToken()}`,
         },
         body: JSON.stringify({ status: newStatus }),
       })
@@ -138,15 +162,60 @@ export default function Orders() {
     if (!confirm(`Delete order #${order.id}?`)) return
     setOrders(prev => prev.filter(o => o.id !== order.id))
     try {
-      await fetch(`${API}/orders/${order.dbId}`, {
+      await fetch(`${getApiBase()}/orders/${order.dbId}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${getToken()}` }
       })
       toast.success('Order deleted')
     } catch {
       toast.error('Failed to delete')
       fetchOrders(true)
     }
+  }
+
+  const printReceipt = (order) => {
+    const w = window.open('', '_blank', 'width=400,height=600')
+    const items = (order.items || []).map(i =>
+      `<tr><td>${i.qty}x ${i.name}</td><td style="text-align:right">${(i.price * i.qty).toFixed(0)} ETB</td></tr>`
+    ).join('')
+    w.document.write(`
+      <html><head><title>Receipt #${order.id?.slice(-6)}</title>
+      <style>
+        body{font-family:'Courier New',monospace;font-size:13px;margin:0;padding:16px;max-width:320px}
+        h2{text-align:center;font-size:16px;margin:0 0 4px}
+        .center{text-align:center} .divider{border-top:1px dashed #000;margin:8px 0}
+        table{width:100%;border-collapse:collapse} td{padding:2px 0}
+        .total{font-weight:bold;font-size:14px} .footer{text-align:center;margin-top:16px;font-size:11px}
+      </style></head>
+      <body onload="window.print();window.close()">
+        <h2>ABC Restaurant</h2>
+        <p class="center" style="font-size:11px;margin:0">Bole Road, Addis Ababa</p>
+        <p class="center" style="font-size:11px;margin:0">+251 91 859 2028</p>
+        <div class="divider"></div>
+        <p style="margin:2px 0"><b>Order:</b> #${order.id?.slice(-6)}</p>
+        ${order.orderType === 'takeaway'
+          ? `<p style="margin:2px 0"><b>Type:</b> 🛍️ TAKEAWAY</p>
+             ${order.pickupNumber ? `<p style="margin:2px 0;font-size:16px;font-weight:bold">Pickup No: ${order.pickupNumber}</p>` : ''}
+             ${order.pickupTime ? `<p style="margin:2px 0"><b>Pickup Time:</b> ${order.pickupTime}</p>` : ''}
+             ${order.deliveryAddress ? `<p style="margin:2px 0"><b>Destination:</b> ${order.deliveryAddress}</p>` : ''}`
+          : `<p style="margin:2px 0"><b>Table:</b> ${order.tableNumber}</p>`
+        }
+        ${order.customerName ? `<p style="margin:2px 0"><b>Customer:</b> ${order.customerName}</p>` : ''}
+        <p style="margin:2px 0"><b>Date:</b> ${new Date(order.createdAt).toLocaleString()}</p>
+        <div class="divider"></div>
+        <table>${items}</table>
+        <div class="divider"></div>
+        <table>
+          <tr><td>Subtotal</td><td style="text-align:right">${(order.subtotal || 0).toFixed(0)} ETB</td></tr>
+          <tr><td>VAT (15%)</td><td style="text-align:right">${(order.vat || 0).toFixed(0)} ETB</td></tr>
+          <tr><td>Service</td><td style="text-align:right">${(order.serviceCharge || 0).toFixed(0)} ETB</td></tr>
+          <tr class="total"><td>TOTAL</td><td style="text-align:right">${(order.grandTotal || 0).toFixed(0)} ETB</td></tr>
+        </table>
+        <div class="divider"></div>
+        <p class="footer">Thank you for dining with us!<br>Powered by Digital Menu</p>
+      </body></html>
+    `)
+    w.document.close()
   }
 
   const filtered = orders.filter(o => {
@@ -165,7 +234,7 @@ export default function Orders() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Orders</h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
-            {orders.length} total · {orders.filter(o => ['new','preparing'].includes(o.status)).length} active
+            {orders.length} total · {orders.filter(o => ['new', 'preparing'].includes(o.status)).length} active
             <span className="ml-2 text-xs text-green-500">● Live (auto-refresh 5s)</span>
           </p>
         </div>
@@ -226,9 +295,19 @@ export default function Orders() {
                 <AnimatePresence>
                   {filtered.map((order, idx) => (
                     <motion.tr key={order.id} initial={{ opacity: 0, backgroundColor: 'rgba(234,88,12,0.1)' }} animate={{ opacity: 1, backgroundColor: 'rgba(0,0,0,0)' }} transition={{ duration: 1.5, delay: idx * 0.02 }} className="border-t border-gray-50 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                      <td className="px-5 py-3 font-bold text-gray-900 dark:text-white">#{order.id?.slice(-6)}</td>
+                      <td className="px-5 py-3 font-bold text-gray-900 dark:text-white">
+                        <div>#{order.id?.slice(-6)}</div>
+                        {order.orderType === 'takeaway' && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full">
+                            🛍️ Takeaway {order.pickupNumber ? `· ${order.pickupNumber}` : ''}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-4 py-3">
-                        <span className="px-2.5 py-1 bg-orange-100 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 rounded-lg text-xs font-bold">T{order.tableNumber}</span>
+                        {order.orderType === 'takeaway'
+                          ? <span className="px-2.5 py-1 bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-lg text-xs font-bold">🛍️ Pickup</span>
+                          : <span className="px-2.5 py-1 bg-orange-100 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 rounded-lg text-xs font-bold">T{order.tableNumber}</span>
+                        }
                       </td>
                       <td className="px-4 py-3 text-gray-700 dark:text-gray-300 max-w-[100px] truncate">{order.customerName || <span className="text-gray-400">Guest</span>}</td>
                       <td className="px-4 py-3 text-gray-500 dark:text-gray-400 max-w-[200px]">
@@ -237,8 +316,8 @@ export default function Orders() {
                       </td>
                       <td className="px-4 py-3 font-bold text-gray-900 dark:text-white">{Number(order.grandTotal || 0).toFixed(0)} ETB</td>
                       <td className="px-4 py-3">
-                        <select value={order.status} onChange={e => handleStatus(order, e.target.value)} className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold capitalize border-0 cursor-pointer focus:ring-2 focus:ring-orange-400 ${statusConfig[order.status]?.bg}`}>
-                          {Object.entries(statusConfig).map(([k, v]) => (<option key={k} value={k}>{v.label}</option>))}
+                        <select value={order.status} disabled={order.status === 'served' || order.status === 'cancelled'} onChange={e => handleStatus(order, e.target.value)} className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold capitalize border-0 cursor-pointer focus:ring-2 focus:ring-orange-400 ${statusConfig[order.status]?.bg}`}>
+                          {Object.entries(statusConfig).map(([k, v]) => (<option key={k} value={k} disabled={!getAvailableStatuses(order.status).includes(k)}>{v.label}</option>))}
                         </select>
                       </td>
                       <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{timeAgo(order.createdAt)}</td>
@@ -264,10 +343,27 @@ export default function Orders() {
             <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }} onClick={e => e.stopPropagation()} className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg border border-gray-100 dark:border-gray-800 max-h-[85vh] overflow-y-auto">
               <div className="modal-header">
                 <div>
-                  <h2 className="text-lg font-bold text-gray-900 dark:text-white">Order #{selectedOrder.id?.slice(-6)}</h2>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Table {selectedOrder.tableNumber} · {timeAgo(selectedOrder.createdAt)}</p>
+                  <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    Order #{selectedOrder.id?.slice(-6)}
+                    {selectedOrder.orderType === 'takeaway' && (
+                      <span className="text-xs font-bold px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full">
+                        🛍️ Takeaway
+                      </span>
+                    )}
+                  </h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {selectedOrder.orderType === 'takeaway'
+                      ? `Pickup${selectedOrder.pickupNumber ? ` · ${selectedOrder.pickupNumber}` : ''}${selectedOrder.pickupTime ? ` · ${selectedOrder.pickupTime}` : ''}`
+                      : `Table ${selectedOrder.tableNumber}`
+                    } · {timeAgo(selectedOrder.createdAt)}
+                  </p>
                 </div>
-                <button onClick={() => setSelectedOrder(null)} className="icon-btn"><FiX size={20} /></button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => printReceipt(selectedOrder)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                    <FiPrinter size={14} /> Print
+                  </button>
+                  <button onClick={() => setSelectedOrder(null)} className="icon-btn"><FiX size={20} /></button>
+                </div>
               </div>
               <div className="p-5 space-y-4">
                 {/* Status bar */}
@@ -276,6 +372,57 @@ export default function Orders() {
                   <span className="font-bold capitalize">{selectedOrder.status}</span>
                   <span className="text-xs ml-auto">Est. {selectedOrder.estimatedTime} min</span>
                 </div>
+                {/* Takeaway / Delivery Info */}
+                {selectedOrder.orderType === 'takeaway' && (
+                  <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 space-y-2 border border-blue-100 dark:border-blue-800">
+                    <p className="font-semibold text-sm text-blue-800 dark:text-blue-300 mb-2 flex items-center gap-2">
+                      🛍️ Takeaway Details
+                    </p>
+                    {selectedOrder.pickupNumber && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600 dark:text-gray-400">Pickup Number</span>
+                        <span className="text-lg font-black text-blue-600 dark:text-blue-400">{selectedOrder.pickupNumber}</span>
+                      </div>
+                    )}
+                    {selectedOrder.pickupTime && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600 dark:text-gray-400">Pickup Time</span>
+                        <span className="text-sm font-bold text-gray-900 dark:text-white">⏰ {selectedOrder.pickupTime}</span>
+                      </div>
+                    )}
+                    {selectedOrder.deliveryAddress && (
+                      <div className="pt-2 border-t border-blue-100 dark:border-blue-800">
+                        <p className="text-xs font-bold text-blue-600 dark:text-blue-400 mb-1.5 flex items-center gap-1">
+                          📍 Destination / Delivery Location
+                        </p>
+                        {/* Map thumbnail */}
+                        {selectedOrder.deliveryLat && selectedOrder.deliveryLng && (
+                          <div className="rounded-xl overflow-hidden mb-2 border border-blue-200 dark:border-blue-700">
+                            <img
+                              src={`https://staticmap.openstreetmap.de/staticmap.php?center=${selectedOrder.deliveryLat},${selectedOrder.deliveryLng}&zoom=15&size=600x160&markers=${selectedOrder.deliveryLat},${selectedOrder.deliveryLng},red`}
+                              alt="Delivery map"
+                              className="w-full h-28 object-cover"
+                              onError={e => { e.target.style.display = 'none' }}
+                            />
+                          </div>
+                        )}
+                        <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug">
+                          {selectedOrder.deliveryAddress}
+                        </p>
+                        {selectedOrder.deliveryLat && selectedOrder.deliveryLng && (
+                          <a
+                            href={`https://www.google.com/maps?q=${selectedOrder.deliveryLat},${selectedOrder.deliveryLng}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 font-semibold mt-2"
+                          >
+                            🗺️ Open in Google Maps →
+                          </a>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {/* Customer */}
                 {(selectedOrder.customerName || selectedOrder.phone || selectedOrder.notes) && (
                   <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 space-y-1.5">
@@ -312,11 +459,14 @@ export default function Orders() {
                 <div>
                   <p className="label mb-2">Update Status</p>
                   <div className="grid grid-cols-5 gap-2">
-                    {Object.entries(statusConfig).map(([key, cfg]) => (
-                      <button key={key} onClick={() => handleStatus(selectedOrder, key)} className={`py-2 rounded-xl text-xs font-bold transition-all ${selectedOrder.status === key ? 'bg-orange-500 text-white shadow-md' : cfg.bg}`}>
-                        {cfg.label}
-                      </button>
-                    ))}
+                    {Object.entries(statusConfig).map(([key, cfg]) => {
+                      const isAvail = getAvailableStatuses(selectedOrder.status).includes(key)
+                      return (
+                        <button key={key} disabled={!isAvail} onClick={() => handleStatus(selectedOrder, key)} className={`py-2 rounded-xl text-xs font-bold transition-all ${selectedOrder.status === key ? 'bg-orange-500 text-white shadow-md' : cfg.bg} ${!isAvail && selectedOrder.status !== key ? 'opacity-30 cursor-not-allowed' : ''}`}>
+                          {cfg.label}
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
               </div>

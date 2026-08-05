@@ -1,9 +1,11 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FiPlus, FiEdit2, FiTrash2, FiSearch, FiImage, FiX, FiSave } from 'react-icons/fi'
+import { FiPlus, FiEdit2, FiTrash2, FiSearch, FiImage, FiX, FiSave, FiDownload, FiUpload } from 'react-icons/fi'
 import { BsFire, BsLeaf } from 'react-icons/bs'
 import toast from 'react-hot-toast'
+import * as XLSX from 'xlsx'
 import { useMenuStore } from '../../store/useMenuStore'
+
 
 const emptyForm = {
   name: '', nameAm: '', description: '', descriptionAm: '', price: '', categoryId: '',
@@ -17,8 +19,89 @@ export default function MenuItems() {
   const [search, setSearch] = useState('')
   const [catFilter, setCatFilter] = useState('all')
   const [showModal, setShowModal] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState(emptyForm)
+  const fileInputRef = useRef(null)
+
+  const handleExport = () => {
+    const exportData = menuItems.map(item => ({
+      'Name (English)': item.name,
+      'Name (Amharic)': item.nameAm || '',
+      'Description (English)': item.description || '',
+      'Description (Amharic)': item.descriptionAm || '',
+      'Price': item.price,
+      'Category ID': item.categoryId,
+      'Image URL': item.image || '',
+      'Prep Time': item.prepTime || 15,
+      'Calories': item.calories || '',
+      'Is Spicy': item.isSpicy ? 'Yes' : 'No',
+      'Is Vegetarian': item.isVegetarian ? 'Yes' : 'No',
+      'Is Available': item.isAvailable ? 'Yes' : 'No',
+      'Is Featured': item.isFeatured ? 'Yes' : 'No',
+      'Is Popular': item.isPopular ? 'Yes' : 'No',
+      'Is Best Seller': item.isBestSeller ? 'Yes' : 'No',
+      'Chef Recommended': item.chefRecommended ? 'Yes' : 'No',
+      'Discount (%)': item.discount || 0,
+      'Allergens': Array.isArray(item.allergens) ? item.allergens.join(',') : '',
+      'Rating': item.rating || 4.5
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(exportData)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "MenuItems")
+    XLSX.writeFile(wb, "menu_items.xlsx")
+  }
+
+  const handleImport = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = async (evt) => {
+      try {
+        const bstr = evt.target.result
+        const wb = XLSX.read(bstr, { type: 'binary' })
+        const wsname = wb.SheetNames[0]
+        const ws = wb.Sheets[wsname]
+        const data = XLSX.utils.sheet_to_json(ws)
+        
+        let successCount = 0
+        for (const row of data) {
+          if (!row['Name (English)'] || !row['Price'] || !row['Category ID']) continue
+
+          const payload = {
+            name: String(row['Name (English)']),
+            nameAm: row['Name (Amharic)'] ? String(row['Name (Amharic)']) : '',
+            description: row['Description (English)'] ? String(row['Description (English)']) : '',
+            descriptionAm: row['Description (Amharic)'] ? String(row['Description (Amharic)']) : '',
+            price: Number(row['Price']),
+            categoryId: String(row['Category ID']),
+            image: row['Image URL'] ? String(row['Image URL']) : '',
+            prepTime: Number(row['Prep Time']) || 15,
+            calories: row['Calories'] ? Number(row['Calories']) : null,
+            isSpicy: String(row['Is Spicy']).toLowerCase() === 'yes',
+            isVegetarian: String(row['Is Vegetarian']).toLowerCase() === 'yes',
+            isAvailable: String(row['Is Available']).toLowerCase() !== 'no',
+            isFeatured: String(row['Is Featured']).toLowerCase() === 'yes',
+            isPopular: String(row['Is Popular']).toLowerCase() === 'yes',
+            isBestSeller: String(row['Is Best Seller']).toLowerCase() === 'yes',
+            chefRecommended: String(row['Chef Recommended']).toLowerCase() === 'yes',
+            discount: Number(row['Discount (%)']) || 0,
+            allergens: row['Allergens'] ? String(row['Allergens']).split(',').map(s=>s.trim()) : [],
+            rating: Number(row['Rating']) || 4.5
+          }
+          await addMenuItem(payload)
+          successCount++
+        }
+        toast.success(`Imported ${successCount} items successfully!`)
+      } catch (err) {
+        toast.error('Failed to parse Excel file')
+        console.error(err)
+      }
+      e.target.value = null
+    }
+    reader.readAsBinaryString(file)
+  }
 
   const filtered = useMemo(() => {
     return menuItems.filter(item => {
@@ -90,9 +173,18 @@ export default function MenuItems() {
             {menuItems.length} items · {menuItems.filter(i => i.isAvailable).length} available
           </p>
         </div>
-        <button onClick={openAdd} className="btn-primary">
-          <FiPlus size={18} /> Add Item
-        </button>
+        <div className="flex gap-2">
+          <input type="file" ref={fileInputRef} onChange={handleImport} accept=".xlsx,.xls,.csv" className="hidden" />
+          <button onClick={() => setShowImportModal(true)} className="btn-secondary flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl font-bold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
+            <FiUpload size={16} /> Import
+          </button>
+          <button onClick={handleExport} className="btn-secondary flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl font-bold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
+            <FiDownload size={16} /> Export
+          </button>
+          <button onClick={openAdd} className="btn-primary">
+            <FiPlus size={18} /> Add Item
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -182,7 +274,7 @@ export default function MenuItems() {
         )}
       </div>
 
-      {/* Modal */}
+      {/* Modals */}
       <AnimatePresence>
         {showModal && (
           <ItemModal
@@ -194,13 +286,95 @@ export default function MenuItems() {
             onSave={handleSave}
           />
         )}
+        {showImportModal && (
+          <ImportHelpModal 
+            onClose={() => setShowImportModal(false)} 
+            onProceed={() => fileInputRef.current?.click()} 
+          />
+        )}
       </AnimatePresence>
     </div>
   )
 }
 
+function ImportHelpModal({ onClose, onProceed }) {
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="modal-backdrop" onClick={onClose}>
+      <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }} onClick={e => e.stopPropagation()} className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg border border-gray-100 dark:border-gray-800 flex flex-col">
+        <div className="modal-header">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">How to Import Items</h2>
+          <button onClick={onClose} className="icon-btn"><FiX size={20} /></button>
+        </div>
+        <div className="p-6 space-y-4 text-gray-700 dark:text-gray-300">
+          <p className="font-semibold text-gray-900 dark:text-white">Follow these simple steps:</p>
+          <ol className="list-decimal pl-5 space-y-2 text-sm leading-relaxed">
+            <li>Click <b>Export</b> first to download the Excel template containing all your current items and the correct columns.</li>
+            <li>Open the downloaded Excel file and add your new products using the same format.</li>
+            <li>For the <b>Image URL</b>, you can arrange your images, upload them (like Imgur) and paste the link here.</li>
+            <li>Make sure required fields (Name, Price, Category ID) are filled.</li>
+            <li>Save the Excel file, then click <b>Continue to Upload</b> below to select it!</li>
+          </ol>
+          <div className="bg-orange-50 dark:bg-orange-900/20 p-4 rounded-xl border border-orange-100 dark:border-orange-800 text-orange-800 dark:text-orange-300 text-sm mt-4">
+            💡 <b>Pro tip:</b> You can find Category IDs in your export file!
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button onClick={onClose} className="btn-secondary">Cancel</button>
+          <button onClick={() => { onClose(); onProceed(); }} className="btn-primary"><FiUpload size={18} /> Continue to Upload</button>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
 function ItemModal({ title, form, setForm, categories, onClose, onSave }) {
   const [tab, setTab] = useState('basic')
+  const imageInputRef = useRef(null)
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file')
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = (evt) => {
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        let width = img.width
+        let height = img.height
+        const maxDim = 800
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width)
+            width = maxDim
+          } else {
+            width = Math.round((width * maxDim) / height)
+            height = maxDim
+          }
+        }
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, 0, 0, width, height)
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+        setForm(prev => ({ ...prev, image: dataUrl }))
+        toast.success('📷 Image uploaded successfully!')
+      }
+      img.onerror = () => {
+        setForm(prev => ({ ...prev, image: evt.target.result }))
+        toast.success('📷 Image uploaded successfully!')
+      }
+      img.src = evt.target.result
+    }
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }
+
   const tabs = [
     { id: 'basic', label: '📝 Basic', },
     { id: 'details', label: '🔍 Details' },
@@ -236,7 +410,58 @@ function ItemModal({ title, form, setForm, categories, onClose, onSave }) {
                 <div className="col-span-2"><label className="label">Name (Amharic)</label><input value={form.nameAm} onChange={e => setForm({...form, nameAm: e.target.value})} placeholder="e.g. ማርጌሪታ ፒዛ" className="input-field" /></div>
                 <div><label className="label">Category *</label><select value={form.categoryId} onChange={e => setForm({...form, categoryId: e.target.value})} className="input-field"><option value="">Select</option>{categories.map(c => (<option key={c.id} value={c.id}>{c.icon} {c.name}</option>))}</select></div>
                 <div><label className="label">Price (ETB) *</label><input type="number" step="0.01" value={form.price} onChange={e => setForm({...form, price: e.target.value})} placeholder="0.00" className="input-field" /></div>
-                <div className="col-span-2"><label className="label">Image URL</label><div className="flex gap-2"><input value={form.image} onChange={e => setForm({...form, image: e.target.value})} placeholder="https://..." className="input-field flex-1" /><div className="w-14 h-14 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700 flex-shrink-0">{form.image ? <img src={form.image} alt="Preview" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-400"><FiImage size={20} /></div>}</div></div></div>
+                
+                <div className="col-span-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="label mb-0">Image URL or Upload File</label>
+                    {form.image && (
+                      <button 
+                        type="button" 
+                        onClick={() => setForm({...form, image: ''})} 
+                        className="text-xs text-red-500 hover:underline font-medium flex items-center gap-1"
+                      >
+                        <FiX size={12} /> Clear Image
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <input 
+                      value={form.image} 
+                      onChange={e => setForm({...form, image: e.target.value})} 
+                      placeholder="Paste image URL or click upload button →" 
+                      className="input-field flex-1" 
+                    />
+                    
+                    <label 
+                      htmlFor="modal-menu-image-file-input"
+                      title="Click to upload image file from your device"
+                      className="w-14 h-14 rounded-xl overflow-hidden bg-gray-50 dark:bg-gray-800 border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-orange-500 dark:hover:border-orange-500 flex items-center justify-center flex-shrink-0 cursor-pointer transition-all relative group shadow-sm shrink-0"
+                    >
+                      <input 
+                        id="modal-menu-image-file-input"
+                        type="file" 
+                        onChange={handleImageUpload} 
+                        accept="image/*" 
+                        className="hidden" 
+                      />
+                      {form.image ? (
+                        <>
+                          <img src={form.image} alt="Preview" className="w-full h-full object-cover" />
+                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-opacity text-center p-0.5">
+                            <FiUpload size={16} />
+                            <span className="text-[8px] font-bold uppercase mt-0.5">Change</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center text-gray-400 group-hover:text-orange-500 transition-colors">
+                          <FiUpload size={20} />
+                          <span className="text-[9px] font-bold mt-0.5 uppercase tracking-wider">Upload</span>
+                        </div>
+                      )}
+                    </label>
+                  </div>
+                </div>
+
                 <div className="col-span-2"><label className="label">Description (English)</label><textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})} rows={2} placeholder="Brief description..." className="input-field resize-none" /></div>
                 <div className="col-span-2"><label className="label">Description (Amharic)</label><textarea value={form.descriptionAm} onChange={e => setForm({...form, descriptionAm: e.target.value})} rows={2} placeholder="Brief description in Amharic..." className="input-field resize-none" /></div>
               </div>

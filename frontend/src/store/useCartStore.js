@@ -6,8 +6,10 @@ const useCartStore = create(
     (set, get) => ({
       items: [],
       tableNumber: null,
+      orderType: 'dine_in', // 'dine_in' | 'takeaway'
 
       setTable: (table) => set({ tableNumber: table }),
+      setOrderType: (type) => set({ orderType: type }),
 
       addItem: (item) => {
         const { items } = get()
@@ -49,7 +51,7 @@ const useCartStore = create(
         })
       },
 
-      clearCart: () => set({ items: [] }),
+      clearCart: () => set({ items: [], orderType: 'dine_in', tableNumber: null }),
 
       get totalItems() {
         return get().items.reduce((sum, i) => sum + i.quantity, 0)
@@ -65,7 +67,7 @@ const useCartStore = create(
         }, 0)
       },
     }),
-    { name: 'cart-store', partialize: (s) => ({ items: s.items, tableNumber: s.tableNumber }) }
+    { name: 'cart-store', partialize: (s) => ({ items: s.items, tableNumber: s.tableNumber, orderType: s.orderType }) }
   )
 )
 

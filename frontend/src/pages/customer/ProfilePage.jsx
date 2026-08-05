@@ -11,6 +11,7 @@ import useCartStore from '../../store/useCartStore'
 import { useOrderStore } from '../../store/useOrderStore'
 import { useRestaurantStore } from '../../store/useRestaurantStore'
 import BottomNav from '../../components/customer/BottomNav'
+import RateExperienceModal from '../../components/customer/RateExperienceModal'
 import toast from 'react-hot-toast'
 
 const avatarOptions = [
@@ -29,6 +30,7 @@ export default function ProfilePage() {
   const { info: restaurantInfo } = useRestaurantStore()
 
   const [showPhotoModal, setShowPhotoModal] = useState(false)
+  const [showRateModal,  setShowRateModal]  = useState(false)
   const [location, setLocation] = useState({ loading: true, city: null, country: null, error: null })
   const [online] = useState(navigator.onLine)
   const fileInputRef = useRef(null)
@@ -183,7 +185,7 @@ export default function ProfilePage() {
             { icon: FiCamera, label: 'Change Profile Photo', sub: profilePhoto ? 'Photo set — tap to change' : 'Upload or choose avatar', color: 'text-orange-500', onClick: () => setShowPhotoModal(true) },
             { icon: FiHeart, label: 'My Favorites', sub: `${favorites.length} saved items`, color: 'text-red-500', onClick: () => navigate('/menu') },
             { icon: FiClock, label: 'My Orders', sub: `${myOrders.length} orders placed`, color: 'text-blue-500', onClick: () => navigate('/order-history') },
-            { icon: FiStar, label: 'Rate Experience', sub: 'Share your feedback', color: 'text-amber-500', onClick: () => toast('Coming soon! 🌟') },
+            { icon: FiStar, label: 'Rate Experience', sub: 'Share your feedback', color: 'text-amber-500', onClick: () => setShowRateModal(true) },
           ].map((item, i) => (
             <motion.button key={i} whileTap={{ scale: 0.98 }} onClick={item.onClick}
               className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-t border-gray-50 dark:border-gray-700">
@@ -264,6 +266,17 @@ export default function ProfilePage() {
           {restaurantInfo.name} · Digital Menu v1.0
         </p>
       </div>
+
+      {/* ── Rate Experience Modal ── */}
+      <RateExperienceModal
+        open={showRateModal}
+        onClose={() => setShowRateModal(false)}
+        orderRef={myOrders[0]?.id || ''}
+        tableNumber={tableNumber}
+        customerName={customerName}
+        phone={customerPhone}
+        language={language}
+      />
 
       {/* ── Photo Modal ── */}
       <AnimatePresence>

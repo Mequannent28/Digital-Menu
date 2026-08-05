@@ -3,7 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { FiClock, FiCheck, FiRefreshCw } from 'react-icons/fi'
 import toast from 'react-hot-toast'
 
-const API = '/api'
+const getApiBase = () =>
+  `${window.location.protocol}//${window.location.hostname}:8000/api`
+const getToken = () => localStorage.getItem('token')
 const statusFlow = { new: 'preparing', preparing: 'ready', ready: 'served' }
 
 const colorsMap = {
@@ -20,21 +22,28 @@ const columnDef = [
 
 function timeAgo(iso) {
   if (!iso) return ''
-  const diff = Math.floor((Date.now() - new Date(iso)) / 1000)
-  if (diff < 60) return `${diff}s`
-  return `${Math.floor(diff / 60)}m`
+  let d = new Date(iso)
+  let diff = Math.floor((Date.now() - d) / 1000)
+  if (diff < -60) {
+    d = new Date(d.getTime() + (d.getTimezoneOffset() * 60000))
+    diff = Math.floor((Date.now() - d) / 1000)
+  }
+  if (diff < 0) diff = 0
+  if (diff < 60) return `${diff}s ago`
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+  return d.toLocaleDateString()
 }
 
 export default function KitchenDisplay() {
   const [orders, setOrders] = useState([])
-  const token = localStorage.getItem('token')
   const intervalRef = useRef(null)
   const prevCountRef = useRef(0)
 
   const fetchOrders = useCallback(async (silent = false) => {
     try {
-      const res = await fetch(`${API}/orders`, {
-        headers: { Authorization: `Bearer ${token}` }
+      const res = await fetch(`${getApiBase()}/orders`, {
+        headers: { Authorization: `Bearer ${getToken()}` }
       })
       if (!res.ok) return
       const data = await res.json()
@@ -48,6 +57,12 @@ export default function KitchenDisplay() {
           customerName: o.customer_name,
           notes: o.notes,
           status: o.status,
+          orderType:       o.order_type || 'dine_in',
+          pickupNumber:    o.pickup_number || '',
+          pickupTime:      o.pickup_time || '',
+          deliveryAddress: o.delivery_address || '',
+          deliveryLat:     o.delivery_lat || null,
+          deliveryLng:     o.delivery_lng || null,
           grandTotal: o.grand_total,
           createdAt: o.created_at,
           estimatedTime: o.estimated_time,
@@ -67,7 +82,7 @@ export default function KitchenDisplay() {
       prevCountRef.current = active.length
       setOrders(active)
     } catch (_) {}
-  }, [token])
+  }, [])
   useEffect(() => {
     fetchOrders()
     intervalRef.current = setInterval(() => fetchOrders(true), 5000)
@@ -84,9 +99,9 @@ export default function KitchenDisplay() {
     if (!next) return
     setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: next } : o))
     try {
-      await fetch(`${API}/orders/${order.dbId}/status`, {
+      await fetch(`${getApiBase()}/orders/${order.dbId}/status`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
         body: JSON.stringify({ status: next }),
       })
       toast.success(`Order #${order.id.slice(-4)} → ${next}`, { icon: '👨‍🍳' })
@@ -100,15 +115,34 @@ export default function KitchenDisplay() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Kitchen Display</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">🍳 Kitchen Display</h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
             {orders.length} active orders
             <span className="ml-2 text-xs text-green-500">● Live (auto-refresh 5s)</span>
           </p>
         </div>
-        <button onClick={() => fetchOrders()} className="btn-primary">
-          <FiRefreshCw size={16} /> Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          {(() => {
+            try {
+              const u = JSON.parse(localStorage.getItem('admin-user') || '{}')
+              return u?.name ? (
+                <div className="flex items-center gap-2 bg-white dark:bg-gray-800 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm">
+                  <span className="text-xl">👨‍🍳</span>
+                  <span className="font-semibold text-gray-900 dark:text-white">{u.name}</span>
+                </div>
+              ) : null
+            } catch { return null }
+          })()}
+          <button onClick={() => fetchOrders()} className="btn-primary">
+            <FiRefreshCw size={16} /> Refresh
+          </button>
+          <button
+            onClick={() => { localStorage.removeItem('token'); localStorage.removeItem('admin-user'); window.location.href = '/admin/login' }}
+            className="text-xs text-red-500 font-semibold px-3 py-2 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors border border-red-200 dark:border-red-900"
+          >
+            Logout
+          </button>
+        </div>
       </div>
 
       {orders.length === 0 ? (
@@ -155,12 +189,38 @@ export default function KitchenDisplay() {
                         {/* Order header */}
                         <div className="flex items-start justify-between mb-3">
                           <div>
-                            <p className="font-black text-gray-900 dark:text-white text-base">
-                              #{order.id.slice(-6)}
-                            </p>
-                            <p className="text-sm font-semibold text-gray-600 dark:text-gray-400">
-                              🪑 Table {order.tableNumber}
-                            </p>
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <p className="font-black text-gray-900 dark:text-white text-base">
+                                #{order.id.slice(-6)}
+                              </p>
+                              {order.orderType === 'takeaway' && (
+                                <span className="text-[10px] font-black px-2 py-0.5 bg-blue-500 text-white rounded-full">
+                                  🛍️ TAKEAWAY
+                                </span>
+                              )}
+                            </div>
+                            {order.orderType === 'takeaway' ? (
+                              <>
+                                {order.pickupNumber && (
+                                  <p className="text-base font-black text-blue-600 dark:text-blue-400">
+                                    {order.pickupNumber}
+                                  </p>
+                                )}
+                                {order.pickupTime && (
+                                  <p className="text-xs text-gray-500 dark:text-gray-400">⏰ {order.pickupTime}</p>
+                                )}
+                                {order.deliveryAddress && (
+                                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 flex items-start gap-1">
+                                    <span className="flex-shrink-0">📍</span>
+                                    <span className="line-clamp-2">{order.deliveryAddress}</span>
+                                  </p>
+                                )}
+                              </>
+                            ) : (
+                              <p className="text-sm font-semibold text-gray-600 dark:text-gray-400">
+                                🪑 Table {order.tableNumber}
+                              </p>
+                            )}
                             {order.customerName && (
                               <p className="text-xs text-gray-500 dark:text-gray-400">{order.customerName}</p>
                             )}

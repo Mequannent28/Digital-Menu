@@ -2,7 +2,7 @@ const router = require('express').Router()
 const { sql, query } = require('../db')
 const auth = require('../middleware/auth')
 
-router.get('/', auth, async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const r = await query(`SELECT * FROM tables ORDER BY number`)
     res.json(r.recordset)

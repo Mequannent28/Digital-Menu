@@ -9,14 +9,12 @@ export const menuApi = {
   getFeatured: () => client.get('/menu-items/featured'),
   search: (q) => client.get('/menu-items/search', { params: { q } }),
 }
-
 export const orderApi = {
   createOrder: (data) => client.post('/orders', data),
   getOrder: (id) => client.get(`/orders/${id}`),
   callWaiter: (tableId) => client.post('/waiter/call', { table_id: tableId }),
   requestBill: (tableId) => client.post('/waiter/request-bill', { table_id: tableId }),
 }
-
 export const adminApi = {
   login: (data) => client.post('/auth/login', data),
   me: () => client.get('/auth/me'),

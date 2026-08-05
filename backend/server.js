@@ -16,9 +16,26 @@ app.use('/api/modifiers',  require('./routes/modifiers'))
 app.use('/api/tables',     require('./routes/tables'))
 app.use('/api/orders',     require('./routes/orders'))
 app.use('/api/users',      require('./routes/users'))
+app.use('/api/waiter-calls', require('./routes/waiterCalls'))
+app.use('/api/reviews',     require('./routes/reviews'))
+app.use('/api/chat',        require('./routes/chat'))
 
 app.get('/', (req, res) => res.json({ message: 'ABC Restaurant API', status: 'running' }))
 app.get('/health', (req, res) => res.json({ status: 'healthy' }))
+app.get('/api/network-info', (req, res) => {
+  const os = require('os')
+  const interfaces = os.networkInterfaces()
+  let localIp = 'localhost'
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        localIp = iface.address
+        break
+      }
+    }
+  }
+  res.json({ localIp, port: process.env.PORT || 8000, frontendPort: 3000 })
+})
 
 // Serve frontend in production (Render)
 if (process.env.NODE_ENV === 'production' || process.env.RENDER) {
@@ -28,7 +45,21 @@ if (process.env.NODE_ENV === 'production' || process.env.RENDER) {
   })
 }
 
+const http = require('http')
+const { Server } = require('socket.io')
+
+const server = http.createServer(app)
+const io = new Server(server, {
+  cors: { origin: '*' }
+})
+
+app.set('io', io)
+
+io.on('connection', (socket) => {
+  console.log('⚡ Client connected to socket:', socket.id)
+})
+
 const PORT = process.env.PORT || 8000
-app.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 API Server running on http://localhost:${PORT}`)
 })

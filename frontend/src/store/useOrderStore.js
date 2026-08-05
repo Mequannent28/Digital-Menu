@@ -40,11 +40,18 @@ export const useOrderStore = create(
           // Also keep locally for order confirmation page
           const localOrder = {
             ...orderData,
-            id: savedOrder.order_ref || savedOrder.id?.toString() || `ORD-${Date.now()}`,
-            dbId: savedOrder.id,
-            status: 'new',
-            createdAt: savedOrder.created_at || new Date().toISOString(),
-            readByAdmin: false,
+            id:           savedOrder.order_ref || savedOrder.id?.toString() || `ORD-${Date.now()}`,
+            dbId:         savedOrder.id,
+            // carry all takeaway fields back from the server response
+            pickup_number:   savedOrder.pickup_number   || '',
+            pickup_time:     savedOrder.pickup_time     || orderData.pickupTime || '',
+            order_type:      savedOrder.order_type      || orderData.orderType  || 'dine_in',
+            delivery_address: savedOrder.delivery_address || orderData.deliveryAddress || '',
+            delivery_lat:    savedOrder.delivery_lat    || orderData.deliveryLat || null,
+            delivery_lng:    savedOrder.delivery_lng    || orderData.deliveryLng || null,
+            status:       'new',
+            createdAt:    savedOrder.created_at || new Date().toISOString(),
+            readByAdmin:  false,
           }
 
           set(s => ({

@@ -3,6 +3,18 @@ const bcrypt = require('bcryptjs')
 const { sql, query } = require('../db')
 const auth = require('../middleware/auth')
 
+// GET /api/users/waiters — PUBLIC, no auth — returns only active waiters for customer UI
+router.get('/waiters', async (req, res) => {
+  try {
+    const r = await query(`
+      SELECT id, name, role FROM users
+      WHERE role = 'waiter' AND is_active = 1
+      ORDER BY name
+    `)
+    res.json(r.recordset)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
 router.get('/', auth, async (req, res) => {
   try {
     const r = await query(`SELECT id, name, email, role, is_active, created_at FROM users ORDER BY created_at`)
@@ -23,7 +35,7 @@ router.post('/', auth, async (req, res) => {
       name: { type: sql.NVarChar, value: name || '' },
       email: { type: sql.NVarChar, value: email },
       pass: { type: sql.NVarChar, value: hash },
-      role: { type: sql.NVarChar, value: role || 'waiter' },
+      role: { type: sql.NVarChar, value: (role || 'waiter').toLowerCase() },
     })
     res.status(201).json(r.recordset[0])
   } catch (err) { res.status(500).json({ error: err.message }) }
@@ -37,7 +49,7 @@ router.put('/:id', auth, async (req, res) => {
       id: { type: sql.Int, value: parseInt(req.params.id) },
       name: { type: sql.NVarChar, value: name },
       email: { type: sql.NVarChar, value: email },
-      role: { type: sql.NVarChar, value: role },
+      role: { type: sql.NVarChar, value: (role || '').toLowerCase() },
       active: { type: sql.Bit, value: is_active ? 1 : 0 },
     }
     if (password) {

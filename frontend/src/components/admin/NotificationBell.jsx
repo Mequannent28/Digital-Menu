@@ -6,11 +6,18 @@ import { useOrderStore } from '../../store/useOrderStore'
 import toast from 'react-hot-toast'
 
 function timeAgo(iso) {
-  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
+  if (!iso) return ''
+  let d = new Date(iso)
+  let diff = Math.floor((Date.now() - d) / 1000)
+  if (diff < -60) {
+    d = new Date(d.getTime() + (d.getTimezoneOffset() * 60000))
+    diff = Math.floor((Date.now() - d) / 1000)
+  }
+  if (diff < 0) diff = 0
   if (diff < 60) return `${diff}s ago`
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-  return new Date(iso).toLocaleDateString()
+  return d.toLocaleDateString()
 }
 
 export default function NotificationBell() {
@@ -34,8 +41,7 @@ export default function NotificationBell() {
           gain.gain.setValueAtTime(0.4, ctx.currentTime)
           gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8)
           osc.start(); osc.stop(ctx.currentTime + 0.8)
-        } catch (_) {}
-
+        } catch (_) { }
         // Show toast
         toast.custom((t) => (
           <motion.div
@@ -63,18 +69,15 @@ export default function NotificationBell() {
         ), { duration: 8000, position: 'top-right' })
       }
     }
-
     window.addEventListener('storage', handleStorage)
     return () => window.removeEventListener('storage', handleStorage)
   }, [])
-
   // Close on outside click
   useEffect(() => {
     const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
-
   return (
     <div ref={ref} className="relative">
       {/* Bell button */}
@@ -102,7 +105,6 @@ export default function NotificationBell() {
           <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-400 rounded-full animate-ping opacity-60" />
         )}
       </motion.button>
-
       {/* Dropdown */}
       <AnimatePresence>
         {open && (

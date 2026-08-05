@@ -1,12 +1,28 @@
-import { useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { QRCodeSVG } from 'qrcode.react'
-import { FiDownload, FiPrinter } from 'react-icons/fi'
+import { FiDownload, FiPrinter, FiGlobe, FiWifi } from 'react-icons/fi'
 import { tables } from '../../data/mockData'
 
-const BASE_URL = window.location.origin
-
 export default function QRCodes() {
+  const defaultHost = window.location.origin
+  const [baseUrl, setBaseUrl] = useState(defaultHost)
+  const [networkIp, setNetworkIp] = useState('')
+
+  useEffect(() => {
+    fetch('/api/network-info')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.localIp && data.localIp !== 'localhost') {
+          setNetworkIp(data.localIp)
+          const portStr = window.location.port ? `:${window.location.port}` : ''
+          const netUrl = `${window.location.protocol}//${data.localIp}${portStr}`
+          setBaseUrl(netUrl)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
   const handleDownload = (tableNumber, svgRef) => {
     const svg = svgRef.current?.querySelector('svg')
     if (!svg) return
@@ -24,25 +40,60 @@ export default function QRCodes() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">QR Codes</h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm">
-            Unique QR codes for each table. Customers scan to access the digital menu.
+            Unique QR codes for each table. Customers scan on local Wi-Fi to auto-open the digital menu.
           </p>
         </div>
-        <button
-          onClick={handlePrintAll}
-          className="flex items-center gap-2 bg-orange-500 text-white px-4 py-2.5 rounded-xl font-medium hover:bg-orange-600 transition-colors"
-        >
-          <FiPrinter size={18} />
-          Print All
-        </button>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handlePrintAll}
+            className="flex items-center gap-2 bg-orange-500 text-white px-4 py-2.5 rounded-xl font-medium hover:bg-orange-600 transition-colors shadow"
+          >
+            <FiPrinter size={18} />
+            Print All
+          </button>
+        </div>
+      </div>
+
+      {/* Network Configuration Card */}
+      <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900/50 rounded-2xl p-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-orange-500 text-white rounded-xl flex items-center justify-center font-bold">
+            <FiWifi size={20} />
+          </div>
+          <div>
+            <h3 className="font-bold text-gray-900 dark:text-white text-sm">Network Target URL</h3>
+            <p className="text-xs text-gray-600 dark:text-gray-400">
+              QR codes use this address so customer phones on Wi-Fi auto-open Table menus.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <input
+            type="text"
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            className="px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl text-xs font-mono text-gray-900 dark:text-white w-full sm:w-64 focus:ring-2 focus:ring-orange-500 focus:outline-none"
+          />
+          {networkIp && baseUrl !== `${window.location.protocol}//${networkIp}:${window.location.port}` && (
+            <button
+              onClick={() => setBaseUrl(`${window.location.protocol}//${networkIp}:${window.location.port}`)}
+              className="text-xs text-orange-600 dark:text-orange-400 hover:underline font-semibold whitespace-nowrap"
+            >
+              Reset to IP
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-5">
         {tables.map((table, idx) => {
-          const qrUrl = `${BASE_URL}/menu/${table.number}`
+          const qrUrl = `${baseUrl}/menu/${table.number}`
           const svgRef = { current: null }
           return (
             <motion.div

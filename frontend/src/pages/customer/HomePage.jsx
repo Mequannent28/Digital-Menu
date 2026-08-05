@@ -1,4 +1,5 @@
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
+import { useSearchParams, useParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { FiChevronRight, FiStar, FiHeart, FiPlus } from 'react-icons/fi'
@@ -11,9 +12,16 @@ import {
 } from '../../data/mockData'
 import { useMenuStore } from '../../store/useMenuStore'
 import useAppStore from '../../store/useAppStore'
+import useCartStore from '../../store/useCartStore'
 import { useRestaurantStore } from '../../store/useRestaurantStore'
+import toast from 'react-hot-toast'
 
 export default function HomePage() {
+  const params = useParams()
+  const [searchParams] = useSearchParams()
+  const setTable = useCartStore((s) => s.setTable)
+  const currentTable = useCartStore((s) => s.tableNumber)
+
   const { t, i18n } = useTranslation()
   const language = i18n.language
   const [searchQuery, setSearchQuery] = useState('')
@@ -21,6 +29,15 @@ export default function HomePage() {
   const [selectedItem, setSelectedItem] = useState(null)
   const [view, setView] = useState('grid')
   const categoryRef = useRef(null)
+
+  // Auto-detect table parameter instantly from URL path or query string (?table=X or /menu/X)
+  useEffect(() => {
+    const tableFromUrl = params.tableId || searchParams.get('table') || searchParams.get('t') || searchParams.get('tableId')
+    if (tableFromUrl && tableFromUrl !== currentTable) {
+      setTable(tableFromUrl)
+      toast.success(`Connected to Table ${tableFromUrl} 🪑`, { id: 'qr-table-toast', duration: 3000 })
+    }
+  }, [params.tableId, searchParams, currentTable, setTable])
 
   const { info: restaurantInfo } = useRestaurantStore()
   const { categories: storeCats, menuItems: storeItems } = useMenuStore()

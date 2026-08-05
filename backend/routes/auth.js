@@ -37,12 +37,9 @@ router.post('/login', async (req, res) => {
         user = FALLBACK_ADMIN
       }
     }
-
     if (!user) return res.status(401).json({ error: 'Invalid credentials' })
-
     const valid = await bcrypt.compare(password, user.password)
     if (!valid) return res.status(401).json({ error: 'Invalid credentials' })
-
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
       process.env.JWT_SECRET || 'digital-menu-secret-key-2024-abc-restaurant',

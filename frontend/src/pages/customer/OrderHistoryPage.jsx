@@ -18,11 +18,17 @@ const statusConfig = {
 
 function timeAgo(iso) {
   if (!iso) return ''
-  const diff = Math.floor((Date.now() - new Date(iso)) / 1000)
+  let d = new Date(iso)
+  let diff = Math.floor((Date.now() - d) / 1000)
+  if (diff < -60) {
+    d = new Date(d.getTime() + (d.getTimezoneOffset() * 60000))
+    diff = Math.floor((Date.now() - d) / 1000)
+  }
+  if (diff < 0) diff = 0
   if (diff < 60) return `${diff}s ago`
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-  return new Date(iso).toLocaleDateString()
+  return d.toLocaleDateString()
 }
 
 export default function OrderHistoryPage() {

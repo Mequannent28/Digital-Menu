@@ -24,32 +24,54 @@ setInterval(() => { dbAvailable = null }, 30000)
 // ── POST /api/orders  (customer places order) ─────────────────────────────────
 router.post('/', async (req, res) => {
   try {
-    const { tableNumber, customerName, phone, notes, items, subtotal, vat, serviceCharge, grandTotal, estimatedTime } = req.body
+    const { tableNumber, customerName, phone, notes, items, subtotal, vat, serviceCharge, grandTotal, estimatedTime, orderType, pickupTime, deliveryAddress, deliveryLat, deliveryLng } = req.body
     if (!items || !items.length) return res.status(400).json({ error: 'Items required' })
 
     const orderRef = `ORD-${Date.now()}`
+    const resolvedOrderType = orderType === 'takeaway' ? 'takeaway' : 'dine_in'
+
+    // Generate sequential pickup number for takeaway (e.g. T-042)
+    let pickupNumber = null
+    if (resolvedOrderType === 'takeaway') {
+      const useDb2 = await checkDb()
+      if (useDb2) {
+        try {
+          const countRes = await query(`SELECT COUNT(*) AS cnt FROM orders WHERE order_type='takeaway' AND CAST(created_at AS DATE) = CAST(GETDATE() AS DATE)`)
+          const todayCount = (countRes.recordset[0]?.cnt || 0) + 1
+          pickupNumber = `T-${String(todayCount).padStart(3, '0')}`
+        } catch (_) { pickupNumber = `T-${Date.now().toString().slice(-3)}` }
+      } else {
+        pickupNumber = `T-${Date.now().toString().slice(-3)}`
+      }
+    }
+
     const useDb = await checkDb()
 
     if (useDb) {
       // ── SQL Server path ──
       try {
         const orderResult = await query(`
-          INSERT INTO orders (order_ref, table_number, customer_name, phone, notes, subtotal, vat, service_charge, grand_total, estimated_time)
+          INSERT INTO orders (order_ref, table_number, customer_name, phone, notes, subtotal, vat, service_charge, grand_total, estimated_time, order_type, pickup_number, pickup_time, delivery_address, delivery_lat, delivery_lng)
           OUTPUT INSERTED.*
-          VALUES (@ref, @table, @name, @phone, @notes, @sub, @vat, @svc, @total, @est)
+          VALUES (@ref, @table, @name, @phone, @notes, @sub, @vat, @svc, @total, @est, @orderType, @pickupNumber, @pickupTime, @deliveryAddress, @deliveryLat, @deliveryLng)
         `, {
-          ref:   { type: sql.NVarChar, value: orderRef },
-          table: { type: sql.NVarChar, value: tableNumber || '' },
-          name:  { type: sql.NVarChar, value: customerName || '' },
-          phone: { type: sql.NVarChar, value: phone || '' },
-          notes: { type: sql.NVarChar, value: notes || '' },
-          sub:   { type: sql.Float,    value: parseFloat(subtotal) || 0 },
-          vat:   { type: sql.Float,    value: parseFloat(vat) || 0 },
-          svc:   { type: sql.Float,    value: parseFloat(serviceCharge) || 0 },
-          total: { type: sql.Float,    value: parseFloat(grandTotal) || 0 },
-          est:   { type: sql.Int,      value: parseInt(estimatedTime) || 20 },
+          ref:             { type: sql.NVarChar, value: orderRef },
+          table:           { type: sql.NVarChar, value: resolvedOrderType === 'takeaway' ? 'Takeaway' : (tableNumber || '') },
+          name:            { type: sql.NVarChar, value: customerName || '' },
+          phone:           { type: sql.NVarChar, value: phone || '' },
+          notes:           { type: sql.NVarChar, value: notes || '' },
+          sub:             { type: sql.Float,    value: parseFloat(subtotal) || 0 },
+          vat:             { type: sql.Float,    value: parseFloat(vat) || 0 },
+          svc:             { type: sql.Float,    value: parseFloat(serviceCharge) || 0 },
+          total:           { type: sql.Float,    value: parseFloat(grandTotal) || 0 },
+          est:             { type: sql.Int,      value: parseInt(estimatedTime) || 20 },
+          orderType:       { type: sql.NVarChar, value: resolvedOrderType },
+          pickupNumber:    { type: sql.NVarChar, value: pickupNumber || '' },
+          pickupTime:      { type: sql.NVarChar, value: pickupTime || '' },
+          deliveryAddress: { type: sql.NVarChar, value: deliveryAddress || '' },
+          deliveryLat:     { type: sql.Float,    value: parseFloat(deliveryLat) || null },
+          deliveryLng:     { type: sql.Float,    value: parseFloat(deliveryLng) || null },
         })
-
         const order = orderResult.recordset[0]
 
         for (const item of items) {
@@ -57,18 +79,24 @@ router.post('/', async (req, res) => {
             INSERT INTO order_items (order_id, menu_item_name, price, quantity, modifiers, special_instructions, item_total)
             VALUES (@orderId, @name, @price, @qty, @mods, @instr, @total)
           `, {
-            orderId: { type: sql.Int,      value: order.id },
-            name:    { type: sql.NVarChar, value: item.name || '' },
-            price:   { type: sql.Float,    value: parseFloat(item.price) || 0 },
-            qty:     { type: sql.Int,      value: parseInt(item.qty) || 1 },
-            mods:    { type: sql.NVarChar, value: item.modifiers || '' },
-            instr:   { type: sql.NVarChar, value: item.specialInstructions || '' },
-            total:   { type: sql.Float,    value: (parseFloat(item.price) || 0) * (parseInt(item.qty) || 1) },
+            orderId: { type: sql.Int, value: order.id },
+            name: { type: sql.NVarChar, value: item.name || '' },
+            price: { type: sql.Float, value: parseFloat(item.price) || 0 },
+            qty: { type: sql.Int, value: parseInt(item.qty) || 1 },
+            mods: { type: sql.NVarChar, value: item.modifiers || '' },
+            instr: { type: sql.NVarChar, value: item.specialInstructions || '' },
+            total: { type: sql.Float, value: (parseFloat(item.price) || 0) * (parseInt(item.qty) || 1) },
           })
         }
 
         const itemsResult = await query(`SELECT * FROM order_items WHERE order_id=@id`,
           { id: { type: sql.Int, value: order.id } })
+
+        if (resolvedOrderType === 'dine_in' && tableNumber) {
+          try {
+            await query(`UPDATE tables SET status = 'occupied' WHERE number = @table`, { table: { type: sql.NVarChar, value: String(tableNumber) } })
+          } catch(e) {}
+        }
 
         return res.status(201).json({ ...order, items: itemsResult.recordset })
       } catch (dbErr) {
@@ -78,12 +106,12 @@ router.post('/', async (req, res) => {
     }
 
     // ── Local store fallback ──
-    const order = local.createOrder({ orderRef, tableNumber, customerName, phone, notes, subtotal, vat, serviceCharge, grandTotal, estimatedTime })
+    const order = local.createOrder({ orderRef, tableNumber: resolvedOrderType === 'takeaway' ? 'Takeaway' : tableNumber, customerName, phone, notes, subtotal, vat, serviceCharge, grandTotal, estimatedTime, orderType: resolvedOrderType, pickupNumber, pickupTime, deliveryAddress, deliveryLat, deliveryLng })
     for (const item of items) {
       local.addOrderItem({ orderId: order.id, name: item.name, price: item.price, qty: item.qty, modifiers: item.modifiers, specialInstructions: item.specialInstructions })
     }
     const saved = local.getOrderById(order.id)
-    console.log(`📦 Order ${orderRef} saved to local store (DB unavailable)`)
+    console.log(`📦 Order ${orderRef} (${resolvedOrderType}) saved to local store (DB unavailable)`)
     return res.status(201).json(saved)
 
   } catch (err) {
@@ -142,7 +170,7 @@ router.get('/:id', async (req, res) => {
     if (useDb) {
       try {
         const ordResult = await query(`SELECT * FROM orders WHERE id=@id OR order_ref=@ref`, {
-          id:  { type: sql.Int,      value: parseInt(req.params.id) || 0 },
+          id: { type: sql.Int, value: parseInt(req.params.id) || 0 },
           ref: { type: sql.NVarChar, value: req.params.id },
         })
         if (ordResult.recordset[0]) {
@@ -180,16 +208,33 @@ router.put('/:id/status', auth, async (req, res) => {
           OUTPUT INSERTED.*
           WHERE id=@id
         `, {
-          id:     { type: sql.Int,      value: parseInt(req.params.id) },
+          id: { type: sql.Int, value: parseInt(req.params.id) },
           status: { type: sql.NVarChar, value: status },
         })
-        if (result.recordset[0]) return res.json(result.recordset[0])
+        const updatedOrder = result.recordset[0]
+        if (updatedOrder) {
+          if (updatedOrder.table_number && (status === 'served' || status === 'cancelled')) {
+             try {
+                const activeCheck = await query(`SELECT COUNT(*) as count FROM orders WHERE table_number=@table AND status IN ('new', 'preparing', 'ready')`, { 
+                  table: { type: sql.NVarChar, value: updatedOrder.table_number }
+                })
+                if (activeCheck.recordset[0].count === 0) {
+                  await query(`UPDATE tables SET status = 'available' WHERE number = @table`, { table: { type: sql.NVarChar, value: updatedOrder.table_number } })
+                }
+             } catch(e) {}
+          }
+          const io = req.app.get('io')
+          if (io) io.emit('order_status_updated', updatedOrder)
+          return res.json(updatedOrder)
+        }
       } catch (_) { dbAvailable = false }
     }
 
     // Local store fallback
     const updated = local.updateOrderStatus(parseInt(req.params.id), status)
     if (!updated) return res.status(404).json({ error: 'Order not found' })
+    const io = req.app.get('io')
+    if (io) io.emit('order_status_updated', updated)
     return res.json(updated)
 
   } catch (err) {

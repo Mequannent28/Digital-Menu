@@ -6,24 +6,30 @@ import useCartStore from '../../store/useCartStore'
 
 export default function SplashScreen() {
   const navigate = useNavigate()
-  const { tableId } = useParams()
+  const params = useParams()
   const { t } = useTranslation()
   const setTable = useCartStore((s) => s.setTable)
   const [progress, setProgress] = useState(0)
 
+  // Extract table from path (/menu/:tableId or /table/:tableId) or query string (?table=X or ?t=X)
+  const queryParams = new URLSearchParams(window.location.search)
+  const tableId = params.tableId || queryParams.get('table') || queryParams.get('t') || queryParams.get('tableId')
+
   useEffect(() => {
-    if (tableId) setTable(tableId)
+    if (tableId) {
+      setTable(tableId)
+    }
 
     const timer = setInterval(() => {
       setProgress((p) => {
         if (p >= 100) { clearInterval(timer); return 100 }
-        return p + 2
+        return p + 5
       })
-    }, 50)
+    }, 30)
 
     const nav = setTimeout(() => {
       navigate('/menu', { replace: true })
-    }, 2800)
+    }, 800)
 
     return () => { clearInterval(timer); clearTimeout(nav) }
   }, [tableId, navigate, setTable])

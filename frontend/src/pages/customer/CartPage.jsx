@@ -6,12 +6,13 @@ import { FiArrowLeft, FiTrash2, FiMinus, FiPlus, FiShoppingBag } from 'react-ico
 import useCartStore from '../../store/useCartStore'
 import { restaurantInfo } from '../../data/mockData'
 import BottomNav from '../../components/customer/BottomNav'
+import OrderTypePicker from '../../components/customer/OrderTypePicker'
 
 export default function CartPage() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const language = i18n.language
-  const { items, removeItem, updateQuantity, clearCart } = useCartStore()
+  const { items, removeItem, updateQuantity, clearCart, orderType, setOrderType } = useCartStore()
 
   const subtotal = items.reduce((sum, item) => {
     const modTotal = (item.selectedModifiers || []).reduce((ms, m) => ms + (m.price || 0), 0)
@@ -67,6 +68,13 @@ export default function CartPage() {
                 ))}
               </AnimatePresence>
             </div>
+
+            {/* Order Type Picker */}
+            <OrderTypePicker
+              value={orderType}
+              onChange={setOrderType}
+              language={language}
+            />
 
             {/* Order Summary */}
             <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 mb-4 border border-gray-100 dark:border-gray-700">

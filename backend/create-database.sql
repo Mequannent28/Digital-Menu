@@ -171,7 +171,7 @@ IF NOT EXISTS (SELECT id FROM restaurant)
 INSERT INTO restaurant (name, name_am, tagline, address, phone, wifi_password, working_hours, cover_url)
 VALUES (
     N'ABC Restaurant', N'ኤቢሲ ምግብ ቤት', N'Fine Dining & Fast Delivery',
-    N'Bole Road, Addis Ababa, Ethiopia', N'+251 91 234 5678',
+    N'Bole Road, Addis Ababa, Ethiopia', N'+251 91 859 2028',
     N'ABCRest@2024', N'Mon–Sun: 7:00 AM – 11:00 PM',
     N'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&q=80'
 );

@@ -24,10 +24,14 @@ import QRCodes from './pages/admin/QRCodes'
 import Orders from './pages/admin/Orders'
 import KitchenDisplay from './pages/admin/KitchenDisplay'
 import Reports from './pages/admin/Reports'
+import Reviews from './pages/admin/Reviews'
+import ChatPanel from './pages/admin/ChatPanel'
 import Users from './pages/admin/Users'
 import Settings from './pages/admin/Settings'
 import AdminGuard from './components/auth/AdminGuard'
 import OrderStatusMonitor from './components/customer/OrderStatusMonitor'
+import ChatWidget from './components/customer/ChatWidget'
+import WaiterPage from './pages/waiter/WaiterPage'
 
 export default function App() {
   const { darkMode } = useAppStore()
@@ -51,15 +55,21 @@ export default function App() {
       
       <Routes>
         {/* Customer Routes */}
-        <Route path="/" element={<SplashScreen />} />
-        <Route path="/menu" element={<HomePage />} />
-        <Route path="/menu/:tableId" element={<SplashScreen />} />
-        <Route path="/cart" element={<CartPage />} />
+        <Route path="/" element={<><HomePage /><ChatWidget /></>} />
+        <Route path="/menu" element={<><HomePage /><ChatWidget /></>} />
+        <Route path="/menu/:tableId" element={<><HomePage /><ChatWidget /></>} />
+        <Route path="/table/:tableId" element={<><HomePage /><ChatWidget /></>} />
+        <Route path="/t/:tableId" element={<><HomePage /><ChatWidget /></>} />
+        <Route path="/scan" element={<><HomePage /><ChatWidget /></>} />
+        <Route path="/cart" element={<><CartPage /><ChatWidget /></>} />
         <Route path="/checkout" element={<CheckoutPage />} />
         <Route path="/order-confirmation/:orderId" element={<OrderConfirmation />} />
-        <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/order-history" element={<OrderHistoryPage />} />
-        <Route path="/categories" element={<CategoriesPage />} />
+        <Route path="/profile" element={<><ProfilePage /><ChatWidget /></>} />
+        <Route path="/order-history" element={<><OrderHistoryPage /><ChatWidget /></>} />
+        <Route path="/categories" element={<><CategoriesPage /><ChatWidget /></>} />
+
+        {/* Waiter Device Route — standalone, no auth required */}
+        <Route path="/waiter" element={<WaiterPage />} />
 
         {/* Admin Routes */}
         <Route path="/admin/login" element={<AdminLogin />} />
@@ -79,8 +89,10 @@ export default function App() {
           <Route path="qr-codes" element={<QRCodes />} />
           <Route path="orders" element={<Orders />} />
           <Route path="kitchen" element={<KitchenDisplay />} />
-          <Route path="reports" element={<Reports />} />
-          <Route path="users" element={<Users />} />
+          <Route path="reports"  element={<Reports />} />
+          <Route path="reviews"  element={<Reviews />} />
+          <Route path="chat"     element={<ChatPanel />} />
+          <Route path="users"    element={<Users />} />
           <Route path="settings" element={<Settings />} />
         </Route>
 

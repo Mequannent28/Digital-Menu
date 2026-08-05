@@ -1,6 +1,5 @@
 const sql = require('mssql')
 require('dotenv').config()
-
 const config = {
   server: process.env.DB_SERVER || 'MARK\\SQLEXPRESS01',
   database: process.env.DB_NAME || 'RestaurantDB',
@@ -11,35 +10,45 @@ const config = {
     encrypt: false,
     enableArithAbort: true,
   },
+  connectionTimeout: 5000,   // fail fast if DB unreachable
+  requestTimeout: 8000,      // max 8s per query
   pool: {
     max: 10,
     min: 0,
     idleTimeoutMillis: 30000,
   },
 }
-
 let pool = null
-
 async function getPool() {
-  if (pool) return pool
+  if (pool && pool.connected) return pool
+  const connectTimeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('DB connection timed out (5s)')), 5000)
+  )
   try {
-    pool = await sql.connect(config)
+    pool = await Promise.race([sql.connect(config), connectTimeout])
+    pool.on('error', (err) => {
+      console.error('❌ Pool error:', err.message)
+      pool = null
+    })
     console.log('✅ Connected to SQL Server RestaurantDB')
     return pool
   } catch (err) {
     pool = null
-    console.error('❌ DB Error:', err.message)
+    console.error('❌ DB connection failed:', err.message)
     throw err
   }
 }
-
+const QUERY_TIMEOUT_MS = 8000
 async function query(sqlText, params = {}) {
   const p = await getPool()
   const request = p.request()
   Object.entries(params).forEach(([key, { type, value }]) => {
     request.input(key, type, value)
   })
-  return request.query(sqlText)
+  // Race the query against a timeout so we never hang indefinitely
+  const timeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error(`DB query timed out after ${QUERY_TIMEOUT_MS}ms`)), QUERY_TIMEOUT_MS)
+  )
+  return Promise.race([request.query(sqlText), timeout])
 }
-
 module.exports = { sql, query, getPool }

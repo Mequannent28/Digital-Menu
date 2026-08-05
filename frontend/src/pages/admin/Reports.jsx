@@ -1,25 +1,115 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   FiTrendingUp, FiTrendingDown, FiDollarSign, FiShoppingCart, 
-  FiUsers, FiClock, FiDownload, FiFileText, FiGrid, FiList
+  FiUsers, FiClock, FiDownload, FiFileText, FiGrid, FiList, FiFilter
 } from 'react-icons/fi'
 import { useMenuStore } from '../../store/useMenuStore'
 import * as XLSX from 'xlsx'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
+const getApiBase = () =>
+  `${window.location.protocol}//${window.location.hostname}:8000/api`
+const getToken = () => localStorage.getItem('token')
+
 export default function Reports() {
-  const { menuItems, categories, orders } = useMenuStore()
-  const [activeTab, setActiveTab] = useState('overview') // overview, transactions, items
+  const { menuItems, categories } = useMenuStore()
+  const [orders, setOrders] = useState([])
+  const [activeTab, setActiveTab] = useState('overview')
+  const [reportType, setReportType] = useState('all') // 'all', 'served', 'ready'
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  
+  // Create applied filters so the filter waits for "SHOW" button
+  const [appliedFilters, setAppliedFilters] = useState({ type: 'all', from: '', to: '' })
+  
+  // Fetch real data from DB
+  const fetchOrders = async () => {
+    try {
+      const res = await fetch(`${getApiBase()}/orders`, {
+        headers: { Authorization: `Bearer ${getToken()}` }
+      })
+      if (!res.ok) throw new Error('Failed to fetch orders')
+      const data = await res.json()
+      if (!Array.isArray(data)) throw new Error('Invalid data format')
+      
+      const mapped = data.map(o => ({
+        id: o.order_ref || String(o.id),
+        dbId: o.id,
+        tableNumber: o.table_number,
+        customerName: o.customer_name,
+        phone: o.phone,
+        notes: o.notes,
+        status: o.status,
+        subtotal: o.subtotal,
+        vat: o.vat,
+        serviceCharge: o.service_charge,
+        grandTotal: o.grand_total || o.total,
+        estimatedTime: o.estimated_time,
+        createdAt: o.created_at || o.createdAt,
+        items: (o.items || []).map(i => ({
+          name: i.menu_item_name || i.name,
+          qty: i.quantity || i.qty,
+          price: i.price,
+        })),
+      }))
+      setOrders(mapped)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  useEffect(() => {
+    fetchOrders()
+  }, [])
+
+  const handleShow = () => {
+    setAppliedFilters({ type: reportType, from: dateFrom, to: dateTo })
+  }
+
+  const setQuickDate = (type) => {
+    const d = new Date()
+    if (type === 'yesterday') d.setDate(d.getDate() - 1)
+    const localDateStr = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0]
+    setDateFrom(localDateStr)
+    setDateTo(localDateStr)
+    setAppliedFilters({ type: reportType, from: localDateStr, to: localDateStr })
+  }
+
+  const filteredOrders = useMemo(() => {
+    return orders.filter(o => {
+      // 1. Report Type Filter
+      if (appliedFilters.type === 'served' && o.status !== 'served') return false
+      if (appliedFilters.type === 'ready' && o.status !== 'ready') return false
+      
+      // 2. Date Filter
+      if (appliedFilters.from || appliedFilters.to) {
+        const oDate = new Date(o.createdAt).getTime()
+        if (appliedFilters.from) {
+          const fromTime = new Date(appliedFilters.from).getTime()
+          if (oDate < fromTime) return false
+        }
+        if (appliedFilters.to) {
+          const toTime = new Date(appliedFilters.to)
+          toTime.setHours(23, 59, 59, 999)
+          if (oDate > toTime.getTime()) return false
+        }
+      }
+      return true
+    })
+  }, [orders, appliedFilters])
+
+  const reportTitle = appliedFilters.type === 'served' ? 'Cash Sales Report' : appliedFilters.type === 'ready' ? 'Captain Order Report' : 'Sales Performance Overview'
+
 
   // Calculate actual revenue and stats from orders
-  const todayRevenue = orders.reduce((sum, o) => sum + (o.grandTotal || o.total || 0), 0)
-  const todayOrders = orders.length
+  const todayRevenue = filteredOrders.reduce((sum, o) => sum + (o.grandTotal || o.total || 0), 0)
+  const todayOrders = filteredOrders.length
   
   // Calculate Item Sales from actual orders
   const itemSalesMap = {}
-  orders.forEach(o => {
+  filteredOrders.forEach(o => {
     (o.items || []).forEach(item => {
       if (!itemSalesMap[item.name]) {
         itemSalesMap[item.name] = { name: item.name, qty: 0, revenue: 0 }
@@ -48,7 +138,7 @@ export default function Reports() {
       // Calculate real category sales
       let soldToday = 0
       let catRevenue = 0
-      orders.forEach(o => {
+      filteredOrders.forEach(o => {
         (o.items || []).forEach(item => {
           const menuItemDetails = menuItems.find(m => m.name === item.name)
           if (menuItemDetails && menuItemDetails.categoryId === cat.id) {
@@ -65,11 +155,11 @@ export default function Reports() {
         catRevenue
       }
     }).sort((a, b) => b.soldToday - a.soldToday)
-  }, [categories, menuItems, orders])
+  }, [categories, menuItems, filteredOrders])
 
   // --- EXPORT FUNCTIONS ---
   const handleExportExcel = () => {
-    const txnData = orders.map(o => ({
+    const txnData = filteredOrders.map(o => ({
       'Order ID': o.id,
       'Date': new Date(o.createdAt).toLocaleString(),
       'Table / VIP': o.tableNumber,
@@ -155,7 +245,7 @@ export default function Reports() {
 
     doc.setFontSize(14)
     doc.setTextColor(40)
-    doc.text("Sales Performance Overview", 14, 56)
+    doc.text(reportTitle, 14, 56)
     
     doc.setFontSize(11)
     doc.setTextColor(60)
@@ -180,7 +270,7 @@ export default function Reports() {
       startY: doc.lastAutoTable.finalY + 22,
       headStyles: { fillColor: [43, 52, 64] },
       head: [['ID', 'Date', 'Amount (ETB)', 'Status', 'Items']],
-      body: orders.slice(0, 30).map(o => [
+      body: filteredOrders.slice(0, 30).map(o => [
         `#${o.id}`,
         new Date(o.createdAt).toLocaleDateString(),
         o.grandTotal || o.total,
@@ -202,20 +292,40 @@ export default function Reports() {
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Comprehensive overview and exports</p>
         </div>
         
-        {/* Export Actions */}
-        <div className="flex flex-wrap items-center gap-3">
-          <button 
-            onClick={handleExportExcel}
-            className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-xl text-sm font-semibold transition-colors"
-          >
-            <FiFileText /> Export to Excel
-          </button>
-          <button 
-            onClick={handleExportPDF}
-            className="flex items-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-semibold transition-colors"
-          >
-            <FiDownload /> Export to PDF
-          </button>
+        <div className="flex flex-col flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <select value={reportType} onChange={e => setReportType(e.target.value)} className="px-3 py-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm text-gray-700 dark:text-gray-300">
+               <option value="all">All Reports</option>
+               <option value="served">Cash Sales Report (Served)</option>
+               <option value="ready">Captain Order Report (Ready)</option>
+            </select>
+            <div className="flex items-center gap-1">
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="px-3 py-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm" />
+              <span className="text-gray-400">to</span>
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="px-3 py-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm" />
+            </div>
+            <div className="flex items-center gap-2 border-l border-gray-200 dark:border-gray-700 pl-2 lg:ml-1">
+              <button onClick={() => setQuickDate('today')} className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-lg text-xs font-bold text-gray-700 dark:text-gray-300 transition-colors">Today</button>
+              <button onClick={() => setQuickDate('yesterday')} className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-lg text-xs font-bold text-gray-700 dark:text-gray-300 transition-colors">Yesterday</button>
+            </div>
+            <button onClick={handleShow} className="flex items-center gap-2 px-4 py-2 ml-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-bold shadow-md shadow-orange-200 dark:shadow-none transition-colors">
+              <FiFilter /> SHOW
+            </button>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button 
+              onClick={handleExportExcel}
+              className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-xl text-sm font-semibold transition-colors"
+            >
+              <FiFileText /> Export Excel
+            </button>
+            <button 
+              onClick={handleExportPDF}
+              className="flex items-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-semibold transition-colors"
+            >
+              <FiDownload /> Export PDF
+            </button>
+          </div>
         </div>
       </div>
 
@@ -288,7 +398,7 @@ export default function Reports() {
         {activeTab === 'transactions' && (
           <motion.div key="transactions" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="card !p-0 overflow-hidden">
             <div className="p-5 border-b border-gray-100 dark:border-gray-800">
-              <h2 className="font-bold text-gray-900 dark:text-white text-lg">Recent Transactions</h2>
+              <h2 className="font-bold text-gray-900 dark:text-white text-lg">{reportTitle} Transactions</h2>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
@@ -303,7 +413,7 @@ export default function Reports() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                  {orders.map(o => (
+                  {filteredOrders.map(o => (
                     <tr key={o.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                       <td className="px-5 py-4 text-sm font-bold text-gray-900 dark:text-white">#{o.id}</td>
                       <td className="px-5 py-4 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{new Date(o.createdAt).toLocaleString()}</td>
@@ -321,7 +431,7 @@ export default function Reports() {
                       </td>
                     </tr>
                   ))}
-                  {orders.length === 0 && (
+                  {filteredOrders.length === 0 && (
                     <tr>
                       <td colSpan="6" className="px-5 py-8 text-center text-sm text-gray-500">No transactions recorded yet.</td>
                     </tr>

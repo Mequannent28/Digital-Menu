@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
@@ -9,6 +9,7 @@ import {
 import useCartStore from '../../store/useCartStore'
 import useAppStore from '../../store/useAppStore'
 import { useRestaurantStore } from '../../store/useRestaurantStore'
+import WaiterCallModal from './WaiterCallModal'
 import toast from 'react-hot-toast'
 
 export default function Header({
@@ -33,8 +34,36 @@ export default function Header({
     setShowLangMenu(false)
   }
 
+  const [waiterCalledToast, setWaiterCalledToast] = useState(false)
+  const [showWaiterModal, setShowWaiterModal]     = useState(false)
+  const [waiterCooldown, setWaiterCooldown]       = useState(0)
+  const cooldownRef                               = useRef(null)
+
   const handleCallWaiter = () => {
-    toast.success(t('waiterCalled'), { icon: '🛎️' })
+    if (waiterCooldown > 0) return
+    setShowWaiterModal(true)
+  }
+
+  // Called by WaiterCallModal after successful submit
+  const handleWaiterCallSent = () => {
+    setShowWaiterModal(false)
+    setWaiterCalledToast(true)
+    setTimeout(() => setWaiterCalledToast(false), 4000)
+    toast.custom((tItem) => (
+      <div className={`flex items-center gap-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-3 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 font-semibold text-sm ${tItem.visible ? 'animate-enter' : 'animate-leave'}`}>
+        <span className="text-xl">🛎️</span>
+        <span>{t('waiterCalled') || 'Waiter has been called!'}</span>
+      </div>
+    ), { duration: 4000 })
+    // Start 15-second cooldown
+    setWaiterCooldown(15)
+    clearInterval(cooldownRef.current)
+    cooldownRef.current = setInterval(() => {
+      setWaiterCooldown(prev => {
+        if (prev <= 1) { clearInterval(cooldownRef.current); return 0 }
+        return prev - 1
+      })
+    }, 1000)
   }
 
   const toggleView = () => {
@@ -42,6 +71,7 @@ export default function Header({
   }
 
   return (
+    <>
     <header className="sticky top-0 z-50 bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-b border-gray-100 dark:border-gray-800">
       <div className="max-w-2xl mx-auto px-4">
 
@@ -73,10 +103,68 @@ export default function Header({
               <FiSearch size={18} />
             </IconBtn>
 
-            {/* Call waiter */}
-            <IconBtn onClick={handleCallWaiter}>
-              <FiBell size={18} />
-            </IconBtn>
+            {/* Call waiter — with 15-second cooldown countdown */}
+            <div className="relative">
+              <motion.button
+                whileTap={waiterCooldown > 0 ? {} : { scale: 0.88 }}
+                onClick={handleCallWaiter}
+                title={waiterCooldown > 0 ? `Wait ${waiterCooldown}s before calling again` : 'Call waiter'}
+                className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors relative overflow-hidden ${
+                  waiterCooldown > 0
+                    ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-400 cursor-not-allowed'
+                    : waiterCalledToast
+                    ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-500'
+                    : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                }`}
+              >
+                {/* Countdown ring overlay */}
+                {waiterCooldown > 0 && (
+                  <svg
+                    className="absolute inset-0 w-full h-full -rotate-90"
+                    viewBox="0 0 36 36"
+                  >
+                    <circle
+                      cx="18" cy="18" r="16"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeOpacity="0.2"
+                      strokeWidth="2"
+                    />
+                    <motion.circle
+                      cx="18" cy="18" r="16"
+                      fill="none"
+                      stroke="#f97316"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeDasharray={`${2 * Math.PI * 16}`}
+                      strokeDashoffset={`${2 * Math.PI * 16 * (1 - waiterCooldown / 15)}`}
+                      style={{ transition: 'stroke-dashoffset 1s linear' }}
+                    />
+                  </svg>
+                )}
+                <FiBell size={18} />
+                {/* Countdown number badge */}
+                {waiterCooldown > 0 && (
+                  <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-orange-500 text-white text-[9px] font-black rounded-full flex items-center justify-center leading-none">
+                    {waiterCooldown}
+                  </span>
+                )}
+              </motion.button>
+
+              <AnimatePresence>
+                {waiterCalledToast && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8, scale: 0.9 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 8, scale: 0.9 }}
+                    className="absolute right-0 top-11 z-50 flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-xs font-bold rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 whitespace-nowrap"
+                  >
+                    <span className="text-base animate-bounce">🛎️</span>
+                    <span>{t('waiterCalled') || 'Waiter has been called!'}</span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
             {/* Dark mode */}
             <motion.button
@@ -250,6 +338,15 @@ export default function Header({
         </AnimatePresence>
       </div>
     </header>
+
+    {/* Waiter Call Modal — rendered outside header so it overlays everything */}
+    <WaiterCallModal
+      open={showWaiterModal}
+      onClose={handleWaiterCallSent}
+      tableNumber={tableNumber}
+      language={language}
+    />
+    </>
   )
 }
 
